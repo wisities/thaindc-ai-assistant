@@ -32,18 +32,18 @@ def transcribe(path:str, suffix:str)->str:
  c=ai(); up=c.files.upload(file=path,config={'mime_type':AUDIO_MIME[suffix]})
  try:
   while up.state and up.state.name=='PROCESSING': time.sleep(1); up=c.files.get(name=up.name)
-  models=[os.getenv('TRANSCRIBE_MODEL','gemini-2.5-flash'),'gemini-2.0-flash','gemini-1.5-flash']
+  models=[os.getenv('TRANSCRIBE_MODEL','gemini-2.5-flash'),'gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-flash-latest']
   prompt='ถอดเสียงไฟล์นี้เป็นข้อความตามที่พูดจริงในภาษาเดิม ห้ามสรุป ห้ามแต่งเติม ถ้าฟังไม่ชัดให้ใส่ [ไม่ชัด] ตอบเฉพาะข้อความถอดเสียง'
-  last_err=None
+  errors=[]
   for m in models:
    for attempt in range(2):
     try:
      out=c.models.generate_content(model=m,contents=[up,prompt])
      return out.text or ''
     except Exception as e:
-     last_err=e
+     errors.append(f"{m}: {e}")
      time.sleep(2)
-  raise HTTPException(503,f'AI โมเดลไม่พร้อมใช้งานชั่วคราว ({str(last_err)}) กรุณาลองใหม่อีกครั้ง')
+  raise HTTPException(503,f"AI โมเดลไม่พร้อมใช้งานชั่วคราว ({'; '.join(errors[-2:])}) กรุณาลองใหม่อีกครั้ง")
  finally:
   try: c.files.delete(name=up.name)
   except Exception: pass
@@ -177,8 +177,8 @@ def summarize(id:str):
  if not any((row['notes'],row['source_text'],row['transcript'])): raise HTTPException(400,'ยังไม่มีเนื้อหาสำหรับสรุป')
  # MVP safeguard: refuse silent truncation, so long lectures require a chunking worker in production.
  if len(source)>100000: raise HTTPException(413,'เนื้อหายาวเกินขีดจำกัดต้นแบบ กรุณาแบ่งการบรรยายเป็นหลายรายการ')
- models=[os.getenv('BRIEF_MODEL','gemini-2.5-flash'),'gemini-2.0-flash','gemini-1.5-flash']
- client=ai(); out=None; last_err=None
+ models=[os.getenv('BRIEF_MODEL','gemini-2.5-flash'),'gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-flash-latest']
+ client=ai(); out=None; errors=[]
  sys_instruction='''คุณเป็นเลขานุการวิชาการสำหรับผู้บริหารระดับสูงของหลักสูตร วปอ. (ThaiNDC). เขียนภาษาไทยกึ่งทางการ กระชับ ตรงประเด็น ห้ามแต่งข้อเท็จจริง/คำพูด/เวลาจากเสียงที่ไม่มี timecode ให้แยก "ข้อเท็จจริงจากแหล่งข้อมูล" และ "การวิเคราะห์ต่อยอดของ AI" อย่างชัดเจน ใช้แหล่งอ้างอิง [สไลด์ N]/[หน้า N]/[เสียงชุด N] เฉพาะเมื่อมีหลักฐาน อย่าอ้างแหล่งเท็จ หากมีความขัดแย้งให้ระบุว่าไม่สอดคล้องกัน ไม่ถ่ายทอดข้อมูลอ่อนไหวที่ไม่จำเป็น จัดรูปแบบ Markdown มี: Executive Summary, Key Takeaways 5-7 ข้อ, Strategic Insights, Implications for Leaders, Evidence & Source References, Reflection Questions 3-5 ข้อ, ข้อจำกัดของข้อมูล. ข้อสำคัญ: ห้ามพิมพ์ชื่อเรื่อง วันที่ หรือชื่อวิทยากรซ้ำที่ส่วนต้น (เนื่องจากระบบมีตารางหัวกระดาษให้อยู่แล้ว) ให้เริ่มต้นเนื้อหาด้วยหัวข้อ Executive Summary ทันที.'''
  for m in models:
   for attempt in range(2):
@@ -186,10 +186,10 @@ def summarize(id:str):
     out=client.models.generate_content(model=m,config=types.GenerateContentConfig(system_instruction=sys_instruction),contents=source)
     if out and out.text: break
    except Exception as e:
-    last_err=e
+    errors.append(f"{m}: {e}")
     time.sleep(2)
   if out and out.text: break
- if not out or not out.text: raise HTTPException(503,f'AI โมเดลไม่พร้อมใช้งานชั่วคราว ({str(last_err)})')
+ if not out or not out.text: raise HTTPException(503,f"AI โมเดลไม่พร้อมใช้งานชั่วคราว ({'; '.join(errors[-2:])})")
  brief=out.text
  with conn() as c: c.execute('UPDATE lectures SET brief=? WHERE id=?',(brief,id))
  brief_html=format_brief_html(row.get('title') or '',row.get('date') or '',row.get('lecturer') or '',brief)
