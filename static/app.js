@@ -233,6 +233,11 @@ function renderLectureList(list) {
             📥 Word (.docx)
           </button>
         ` : ''}
+        ${item.has_transcript ? `
+          <button class="btn-secondary btn-sm" onclick="downloadTranscriptDirect('${item.id}', '${escapeHtml(item.title)}', 'txt')" title="ดาวน์โหลดถอดเทปดิบ (.txt)">
+            📝 ถอดเทป (.txt)
+          </button>
+        ` : ''}
         <button class="btn-secondary btn-sm" onclick="openShareModal('${item.share_token}')">
           🔗 แชร์ลิงก์
         </button>
@@ -286,6 +291,27 @@ el('lectureForm').onsubmit = async (e) => {
 };
 
 // Lecture Detail & Brief View
+let currentDetailTab = 'brief';
+
+function switchDetailTab(tab) {
+  currentDetailTab = tab;
+  const bTab = el('tabBriefBtn');
+  const tTab = el('tabTranscriptBtn');
+  const bPaper = el('briefPaper');
+  const tPaper = el('transcriptPaper');
+  if (tab === 'brief') {
+    if (bTab) bTab.classList.add('active');
+    if (tTab) tTab.classList.remove('active');
+    if (bPaper) bPaper.style.display = 'block';
+    if (tPaper) tPaper.style.display = 'none';
+  } else {
+    if (bTab) bTab.classList.remove('active');
+    if (tTab) tTab.classList.add('active');
+    if (bPaper) bPaper.style.display = 'none';
+    if (tPaper) tPaper.style.display = 'block';
+  }
+}
+
 async function loadLectureDetail(id) {
   const paper = el('briefPaper');
   paper.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:40px 0;">กำลังโหลดเนื้อหาบทสรุป...</p>';
@@ -293,7 +319,7 @@ async function loadLectureDetail(id) {
     const data = await api('/api/lectures/' + id);
     currentLecture = data;
 
-    // Download Docx Button
+    // Download Docx Button (Executive Brief)
     const dlBtn = el('downloadDocxBtn');
     if (data.brief) {
       dlBtn.style.display = 'inline-flex';
@@ -305,6 +331,25 @@ async function loadLectureDetail(id) {
       dlBtn.style.display = 'none';
     }
 
+    // Download Transcript Buttons (.txt & .docx)
+    const hasRaw = Boolean(data.transcript || data.notes || data.source_text);
+    const txtBtn = el('downloadTranscriptTxtBtn');
+    const docxTranscriptBtn = el('downloadTranscriptDocxBtn');
+    if (txtBtn) {
+      txtBtn.style.display = hasRaw ? 'inline-flex' : 'none';
+      txtBtn.onclick = (e) => {
+        e.preventDefault();
+        downloadTranscriptDirect(data.id, data.title, 'txt');
+      };
+    }
+    if (docxTranscriptBtn) {
+      docxTranscriptBtn.style.display = hasRaw ? 'inline-flex' : 'none';
+      docxTranscriptBtn.onclick = (e) => {
+        e.preventDefault();
+        downloadTranscriptDirect(data.id, data.title, 'docx');
+      };
+    }
+
     // Summarize Button
     const sumBtn = el('summarizeBtn');
     sumBtn.textContent = data.brief ? '✨ สร้างบทสรุปใหม่' : '✨ สร้าง Executive Brief';
@@ -314,12 +359,15 @@ async function loadLectureDetail(id) {
     el('shareBtn').onclick = () => openShareModal(data.share_token);
 
     // Copy Button
-    el('copyBtn').onclick = () => copyBriefContent();
+    el('copyBtn').onclick = () => copyActiveContent();
 
     // Delete Button
     el('deleteBtn').onclick = () => deleteLecture(data.id, data.title, true);
 
-    // Render Preview
+    // Reset tab to brief
+    switchDetailTab('brief');
+
+    // Render Brief Preview
     if (data.brief_html) {
       paper.innerHTML = data.brief_html;
     } else if (data.brief) {
@@ -329,15 +377,83 @@ async function loadLectureDetail(id) {
         <div style="text-align:center; padding: 48px 12px; color: var(--text-muted);">
           <h3 style="color:var(--primary); font-size:16px; margin-bottom:8px;">บันทึกข้อมูลและเสียงสำเร็จแล้ว</h3>
           <p style="font-size:13px; margin-bottom:16px;">ยังไม่มีเอกสารสรุป Executive Brief สำหรับบทเรียนนี้</p>
-          <button class="btn-gold" onclick="generateBrief('${data.id}')">
-            ✨ คลิกที่นี่เพื่อสร้าง Executive Brief ด้วย AI
-          </button>
+          <div style="display:flex; justify-content:center; gap:8px;">
+            <button class="btn-gold" onclick="generateBrief('${data.id}')">
+              ✨ คลิกที่นี่เพื่อสร้าง Executive Brief ด้วย AI
+            </button>
+            <button class="btn-secondary" onclick="switchDetailTab('transcript')">
+              🎙️ ดูเนื้อหาถอดเทปดิบ
+            </button>
+          </div>
         </div>
       `;
     }
+
+    // Render Transcript Preview
+    renderTranscriptPaper(data);
+
   } catch (err) {
     paper.innerHTML = `<p style="color:red; text-align:center;">${escapeHtml(err.message)}</p>`;
   }
+}
+
+function renderTranscriptPaper(data) {
+  const paper = el('transcriptPaper');
+  if (!paper) return;
+  const hasRaw = Boolean(data.transcript || data.notes || data.source_text);
+  if (!hasRaw) {
+    paper.innerHTML = `
+      <div style="text-align:center; padding: 48px 12px; color: var(--text-muted);">
+        <p>ไม่มีข้อมูลการถอดเสียงหรือบันทึกคำบรรยายในรายการนี้</p>
+      </div>
+    `;
+    return;
+  }
+
+  let html = `
+    <div style="margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+      <div>
+        <h2 style="font-size: 18px; color: var(--primary); margin: 0 0 4px;">🎙️ บันทึกคำบรรยายถอดเสียง (Raw Transcript)</h2>
+        <div style="font-size: 13px; color: var(--text-muted);">
+          <span>${escapeHtml(data.title)}</span> · <span>${escapeHtml(data.date)}</span> ${data.lecturer ? `· <span>${escapeHtml(data.lecturer)}</span>` : ''}
+        </div>
+      </div>
+      <div style="display: flex; gap: 6px;">
+        <button class="btn btn-secondary btn-sm" onclick="downloadTranscriptDirect('${data.id}', '${escapeHtml(data.title)}', 'txt')">📝 ดาวน์โหลด .txt</button>
+        <button class="btn btn-secondary btn-sm" onclick="downloadTranscriptDirect('${data.id}', '${escapeHtml(data.title)}', 'docx')">📄 ดาวน์โหลด .docx</button>
+        <button class="btn btn-secondary btn-sm" onclick="copyTranscriptText()">📋 คัดลอกถอดเสียง</button>
+      </div>
+    </div>
+  `;
+
+  if (data.transcript) {
+    html += `
+      <div style="margin-bottom: 24px;">
+        <h4 style="font-size: 15px; color: var(--primary-light); margin-bottom: 8px;">🔊 ถอดเสียงบรรยายจากการบันทึก (Audio Transcript)</h4>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; color: #1e293b;">${escapeHtml(data.transcript)}</div>
+      </div>
+    `;
+  }
+
+  if (data.notes) {
+    html += `
+      <div style="margin-bottom: 24px;">
+        <h4 style="font-size: 15px; color: var(--primary-light); margin-bottom: 8px;">📝 บันทึกเพิ่มเติมของผู้เรียน (Personal Notes)</h4>
+        <div style="background: #fdfbf7; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; color: #7c2d12;">${escapeHtml(data.notes)}</div>
+      </div>
+    `;
+  }
+
+  if (data.source_text) {
+    html += `
+      <div style="margin-bottom: 24px;">
+        <h4 style="font-size: 15px; color: var(--primary-light); margin-bottom: 8px;">📑 ข้อความจากเอกสาร / สไลด์ (Slides & Docs)</h4>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; color: #334155; max-height: 400px; overflow-y: auto;">${escapeHtml(data.source_text)}</div>
+      </div>
+    `;
+  }
+
+  paper.innerHTML = html;
 }
 
 // Generate Brief
@@ -357,7 +473,7 @@ async function generateBrief(id) {
   }
 }
 
-// Download Docx with Auth Token
+// Download Docx with Auth Token (Executive Brief)
 async function downloadDocxDirect(id, title) {
   const token = localStorage.getItem('thaindc_token');
   showBanner('กำลังจัดเตรียมไฟล์ Word (.docx)...', 'info', 3000);
@@ -384,6 +500,42 @@ async function downloadDocxDirect(id, title) {
   }
 }
 
+// Download Raw Transcript (.txt or .docx)
+async function downloadTranscriptDirect(id, title, format = 'txt') {
+  const token = localStorage.getItem('thaindc_token');
+  const ext = format === 'docx' ? 'docx' : 'txt';
+  showBanner(`กำลังจัดเตรียมไฟล์ถอดเทป (${ext.toUpperCase()})...`, 'info', 3000);
+  try {
+    const res = await fetch(`/api/lectures/${id}/download-transcript?format=${format}`, {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'ไม่สามารถดาวน์โหลดไฟล์ถอดเทปได้');
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Transcript_${title || 'lecture'}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    showBanner(`ดาวน์โหลดไฟล์ถอดเทป (.${ext}) สำเร็จ!`, 'success');
+  } catch (err) {
+    showBanner('ดาวน์โหลดไม่สำเร็จ: ' + err.message, 'error');
+  }
+}
+
+// Copy Active Tab Content
+async function copyActiveContent() {
+  if (currentDetailTab === 'transcript') {
+    return copyTranscriptText();
+  }
+  return copyBriefContent();
+}
+
 // Copy Brief Content
 async function copyBriefContent() {
   const paper = el('briefPaper');
@@ -402,6 +554,24 @@ async function copyBriefContent() {
     }
   } catch (err) {
     showBanner('ไม่สามารถคัดลอกได้: ' + err.message, 'error');
+  }
+}
+
+// Copy Transcript Text
+async function copyTranscriptText() {
+  if (!currentLecture) return showBanner('ไม่มีข้อมูลสำหรับคัดลอก', 'error');
+  const text = [
+    currentLecture.transcript ? `=== ถอดเสียงบรรยาย ===\n${currentLecture.transcript}` : '',
+    currentLecture.notes ? `=== บันทึกผู้เรียน ===\n${currentLecture.notes}` : '',
+    currentLecture.source_text ? `=== เอกสารสไลด์ ===\n${currentLecture.source_text}` : ''
+  ].filter(Boolean).join('\n\n');
+
+  if (!text) return showBanner('ไม่มีข้อความถอดเสียงสำหรับคัดลอก', 'error');
+  try {
+    await navigator.clipboard.writeText(text);
+    showBanner('คัดลอกข้อความถอดเสียงเรียบร้อยแล้ว!', 'success');
+  } catch (e) {
+    showBanner('ไม่สามารถคัดลอกได้: ' + e.message, 'error');
   }
 }
 

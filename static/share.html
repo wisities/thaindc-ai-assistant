@@ -135,20 +135,36 @@
     <header class="top-bar">
       <div class="branding">
         <h1>📘 ThaiNDC AI Learning Assistant</h1>
-        <p>เอกสารสรุปบทเรียนรายวันเพื่อผู้บริหาร วปอ. (Executive Brief)</p>
+        <p>เอกสารสรุปบทเรียนและคำบรรยาย วปอ. (Executive Brief & Transcript)</p>
       </div>
       <div class="action-group">
-        <a id="downloadDocx" href="#" class="btn btn-primary">
-          📥 ดาวน์โหลดไฟล์ Word (.docx)
+        <a id="downloadDocx" href="#" class="btn btn-primary" title="ดาวน์โหลดบทสรุป Executive Brief เป็นเอกสาร Word">
+          📥 สรุป Word (.docx)
+        </a>
+        <a id="downloadTranscriptTxt" href="#" class="btn btn-secondary" style="display:none;" title="ดาวน์โหลดเนื้อหาถอดเทปดิบเป็นไฟล์ข้อความ">
+          📝 ถอดเทปดิบ (.txt)
+        </a>
+        <a id="downloadTranscriptDocx" href="#" class="btn btn-secondary" style="display:none;" title="ดาวน์โหลดเนื้อหาถอดเทปเป็นเอกสาร Word">
+          📄 ถอดเทป Word (.docx)
         </a>
         <button id="copyBtn" class="btn btn-secondary">
-          📋 คัดลอกสรุป
+          📋 คัดลอก
         </button>
         <button onclick="window.print()" class="btn btn-secondary">
           🖨️ พิมพ์
         </button>
       </div>
     </header>
+
+    <!-- Tabs for Brief vs Transcript -->
+    <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+      <button id="tabBriefBtn" class="btn btn-primary" onclick="switchSharedTab('brief')" style="border-radius: 8px; font-size: 13px;">
+        📋 บทสรุป Executive Brief
+      </button>
+      <button id="tabTranscriptBtn" class="btn btn-secondary" onclick="switchSharedTab('transcript')" style="border-radius: 8px; font-size: 13px; display: none;">
+        🎙️ คำบรรยายถอดเสียง (Transcript)
+      </button>
+    </div>
 
     <main class="paper" id="paperContent">
       <div id="loading">กำลังโหลดเอกสารสรุปบทเรียน...</div>
@@ -163,13 +179,90 @@
     const token = window.location.pathname.split('/').pop();
     const paper = document.getElementById('paperContent');
     const downloadDocx = document.getElementById('downloadDocx');
+    const downloadTranscriptTxt = document.getElementById('downloadTranscriptTxt');
+    const downloadTranscriptDocx = document.getElementById('downloadTranscriptDocx');
+    const tabBriefBtn = document.getElementById('tabBriefBtn');
+    const tabTranscriptBtn = document.getElementById('tabTranscriptBtn');
     const copyBtn = document.getElementById('copyBtn');
     const alertBox = document.getElementById('alert');
+
+    let currentData = null;
+    let currentTab = 'brief';
 
     function showAlert(msg, type='success') {
       alertBox.textContent = msg;
       alertBox.className = type;
       setTimeout(() => { alertBox.className = ''; alertBox.style.display = 'none'; }, 4000);
+    }
+
+    function switchSharedTab(tab) {
+      currentTab = tab;
+      if (tab === 'brief') {
+        tabBriefBtn.className = 'btn btn-primary';
+        tabTranscriptBtn.className = 'btn btn-secondary';
+        renderSharedBrief();
+      } else {
+        tabBriefBtn.className = 'btn btn-secondary';
+        tabTranscriptBtn.className = 'btn btn-primary';
+        renderSharedTranscript();
+      }
+    }
+
+    function renderSharedBrief() {
+      if (!currentData) return;
+      if (currentData.brief_html) {
+        paper.innerHTML = currentData.brief_html;
+      } else {
+        paper.innerHTML = '<pre style="white-space:pre-wrap; font-family:inherit;">' + (currentData.brief || 'ยังไม่มีสรุป') + '</pre>';
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      }[m]));
+    }
+
+    function renderSharedTranscript() {
+      if (!currentData) return;
+      let html = `
+        <div style="margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+          <h2 style="font-size: 18px; color: var(--primary); margin: 0 0 6px;">🎙️ บันทึกคำบรรยายถอดเสียง (Lecture Transcript)</h2>
+          <div style="font-size: 13px; color: var(--text-muted);">
+            <span>${escapeHtml(currentData.title)}</span> · <span>${escapeHtml(currentData.date)}</span> ${currentData.lecturer ? `· <span>${escapeHtml(currentData.lecturer)}</span>` : ''}
+          </div>
+        </div>
+      `;
+
+      if (currentData.transcript) {
+        html += `
+          <div style="margin-bottom: 24px;">
+            <h4 style="font-size: 15px; color: var(--primary-light); margin-bottom: 8px;">🔊 ถอดเสียงบรรยายจากการบันทึก (Audio Transcript)</h4>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; color: #1e293b;">${escapeHtml(currentData.transcript)}</div>
+          </div>
+        `;
+      }
+
+      if (currentData.notes) {
+        html += `
+          <div style="margin-bottom: 24px;">
+            <h4 style="font-size: 15px; color: var(--primary-light); margin-bottom: 8px;">📝 บันทึกเพิ่มเติมของผู้เรียน (Personal Notes)</h4>
+            <div style="background: #fdfbf7; border: 1px solid #fed7aa; border-radius: 8px; padding: 18px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; color: #7c2d12;">${escapeHtml(currentData.notes)}</div>
+          </div>
+        `;
+      }
+
+      if (currentData.source_text) {
+        html += `
+          <div style="margin-bottom: 24px;">
+            <h4 style="font-size: 15px; color: var(--primary-light); margin-bottom: 8px;">📑 ข้อความจากเอกสาร / สไลด์ (Slides & Docs)</h4>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; color: #334155; max-height: 450px; overflow-y: auto;">${escapeHtml(currentData.source_text)}</div>
+          </div>
+        `;
+      }
+
+      paper.innerHTML = html;
     }
 
     async function loadShared() {
@@ -184,25 +277,50 @@
           throw new Error(err.detail || 'ไม่พบเอกสารนี้ หรือลิงก์หมดอายุ');
         }
         const data = await res.json();
+        currentData = data;
         document.title = (data.title || 'Executive Brief') + ' · ThaiNDC AI';
-        downloadDocx.href = '/api/share/' + token + '/download-docx';
 
-        if (data.brief_html) {
-          paper.innerHTML = data.brief_html;
+        // Setup Brief download
+        if (data.brief) {
+          downloadDocx.href = '/api/share/' + token + '/download-docx';
+          downloadDocx.style.display = 'inline-flex';
         } else {
-          paper.innerHTML = '<pre style="white-space:pre-wrap; font-family:inherit;">' + (data.brief || 'ยังไม่มีสรุป') + '</pre>';
+          downloadDocx.style.display = 'none';
         }
+
+        // Setup Transcript downloads and tab
+        const hasRaw = Boolean(data.transcript || data.notes || data.source_text);
+        if (hasRaw) {
+          downloadTranscriptTxt.href = '/api/share/' + token + '/download-transcript?format=txt';
+          downloadTranscriptTxt.style.display = 'inline-flex';
+          downloadTranscriptDocx.href = '/api/share/' + token + '/download-transcript?format=docx';
+          downloadTranscriptDocx.style.display = 'inline-flex';
+          tabTranscriptBtn.style.display = 'inline-flex';
+        }
+
+        // Initial render
+        renderSharedBrief();
 
         copyBtn.onclick = async () => {
           try {
-            if (navigator.clipboard && window.ClipboardItem && data.brief_html) {
-              const blob = new Blob([data.brief_html], { type: 'text/html' });
-              const textBlob = new Blob([paper.innerText || paper.textContent], { type: 'text/plain' });
-              await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob, 'text/plain': textBlob })]);
-              showAlert('คัดลอกเรียบร้อย! สามารถวาง (Ctrl+V) ลงใน Word หรือช่องแชทได้ทันที');
+            if (currentTab === 'transcript') {
+              const text = [
+                currentData.transcript ? `=== ถอดเสียงบรรยาย ===\n${currentData.transcript}` : '',
+                currentData.notes ? `=== บันทึกผู้เรียน ===\n${currentData.notes}` : '',
+                currentData.source_text ? `=== เอกสารสไลด์ ===\n${currentData.source_text}` : ''
+              ].filter(Boolean).join('\n\n');
+              await navigator.clipboard.writeText(text);
+              showAlert('คัดลอกข้อความถอดเสียงเรียบร้อยแล้ว');
             } else {
-              await navigator.clipboard.writeText(paper.innerText || paper.textContent);
-              showAlert('คัดลอกข้อความสรุปเรียบร้อยแล้ว');
+              if (navigator.clipboard && window.ClipboardItem && currentData.brief_html) {
+                const blob = new Blob([currentData.brief_html], { type: 'text/html' });
+                const textBlob = new Blob([paper.innerText || paper.textContent], { type: 'text/plain' });
+                await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob, 'text/plain': textBlob })]);
+                showAlert('คัดลอกเรียบร้อย! สามารถวาง (Ctrl+V) ลงใน Word หรือช่องแชทได้ทันที');
+              } else {
+                await navigator.clipboard.writeText(paper.innerText || paper.textContent);
+                showAlert('คัดลอกข้อความสรุปเรียบร้อยแล้ว');
+              }
             }
           } catch (e) {
             showAlert('ไม่สามารถคัดลอกได้: ' + e.message, 'error');

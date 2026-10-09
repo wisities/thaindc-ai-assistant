@@ -167,3 +167,123 @@ def build_executive_brief_docx(title: str, date: str, lecturer: str, brief_markd
     doc.save(buf)
     buf.seek(0)
     return buf
+
+def build_transcript_text(title: str, date: str, lecturer: str, transcript: str, notes: str = "", source_text: str = "") -> str:
+    lines = []
+    lines.append("=" * 64)
+    lines.append("บันทึกคำบรรยายและถอดเสียง (Lecture Transcript)")
+    lines.append("หลักสูตรวิทยาลัยป้องกันราชอาณาจักร (วปอ.) - ThaiNDC")
+    lines.append("=" * 64)
+    lines.append(f"หัวข้อ: {title or '-'}")
+    lines.append(f"วันที่: {date or '-'}")
+    lines.append(f"วิทยากร: {lecturer or '-'}")
+    lines.append("=" * 64)
+    lines.append("")
+    if transcript and transcript.strip():
+        lines.append("--- [1] บันทึกคำบรรยายถอดเสียง (Audio/Video Transcript) ---")
+        lines.append(transcript.strip())
+        lines.append("")
+    if notes and notes.strip():
+        lines.append("--- [2] บันทึกเพิ่มเติมของผู้เรียน (Personal Notes) ---")
+        lines.append(notes.strip())
+        lines.append("")
+    if source_text and source_text.strip():
+        lines.append("--- [3] เนื้อหาจากเอกสารประกอบการบรรยายและสไลด์ (Slides & Docs) ---")
+        lines.append(source_text.strip())
+        lines.append("")
+    return "\n".join(lines)
+
+def build_transcript_docx(title: str, date: str, lecturer: str, transcript: str, notes: str = "", source_text: str = "") -> io.BytesIO:
+    doc = docx.Document()
+
+    # Set 1-inch margins
+    for s in doc.sections:
+        s.top_margin = Inches(1)
+        s.bottom_margin = Inches(1)
+        s.left_margin = Inches(1)
+        s.right_margin = Inches(1)
+
+    # Document Title
+    title_p = doc.add_paragraph()
+    title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title_p.paragraph_format.space_before = Pt(0)
+    title_p.paragraph_format.space_after = Pt(12)
+    t_run = title_p.add_run("บันทึกคำบรรยายและถอดเสียง (Lecture Transcript)")
+    set_run_font(t_run, size_pt=18, bold=True, color=RGBColor(15, 41, 66))
+
+    # Metadata Table
+    table = doc.add_table(rows=3, cols=2)
+    table.autofit = False
+    rows_data = [
+        ("หัวข้อ", title or "-"),
+        ("วันที่", date or "-"),
+        ("อาจารย์/วิทยากร", lecturer or "-")
+    ]
+    for idx, (label, val) in enumerate(rows_data):
+        row = table.rows[idx]
+        c0, c1 = row.cells[0], row.cells[1]
+        c0.width = Inches(1.8)
+        c1.width = Inches(4.7)
+
+        p0 = c0.paragraphs[0]
+        p0.paragraph_format.space_before = Pt(2)
+        p0.paragraph_format.space_after = Pt(2)
+        r0 = p0.add_run(label)
+        set_run_font(r0, size_pt=16, bold=True, color=RGBColor(15, 41, 66))
+
+        p1 = c1.paragraphs[0]
+        p1.paragraph_format.space_before = Pt(2)
+        p1.paragraph_format.space_after = Pt(2)
+        r1 = p1.add_run(val)
+        set_run_font(r1, size_pt=16, bold=False)
+
+    tblPr = table._tbl.tblPr
+    borders_xml = parse_xml(
+        f'<w:tblBorders {nsdecls("w")}>'
+        f'<w:top w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
+        f'<w:left w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
+        f'<w:bottom w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
+        f'<w:right w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
+        f'<w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>'
+        f'<w:insideV w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>'
+        f'</w:tblBorders>'
+    )
+    tblPr.append(borders_xml)
+
+    sep_p = doc.add_paragraph()
+    sep_p.paragraph_format.space_before = Pt(0)
+    sep_p.paragraph_format.space_after = Pt(8)
+
+    def add_section(header_title: str, content: str):
+        if not content or not content.strip():
+            return
+        hp = doc.add_paragraph()
+        hp.paragraph_format.space_before = Pt(14)
+        hp.paragraph_format.space_after = Pt(4)
+        hp.paragraph_format.line_spacing = 1.15
+        hrun = hp.add_run(header_title)
+        set_run_font(hrun, size_pt=17, bold=True, color=RGBColor(15, 41, 66))
+
+        for block in content.strip().split('\n\n'):
+            block = block.strip()
+            if not block:
+                continue
+            bp = doc.add_paragraph()
+            bp.paragraph_format.space_before = Pt(2)
+            bp.paragraph_format.space_after = Pt(4)
+            bp.paragraph_format.line_spacing = 1.15
+            run = bp.add_run(block)
+            set_run_font(run, size_pt=16, bold=False)
+
+    if transcript:
+        add_section("🎙️ บันทึกคำบรรยายถอดเสียง (Audio/Video Transcript)", transcript)
+    if notes:
+        add_section("📝 บันทึกเพิ่มเติมของผู้เรียน (Personal Notes)", notes)
+    if source_text:
+        add_section("📑 เนื้อหาจากเอกสารและสไลด์ประกอบการบรรยาย (Slides & Documents)", source_text)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
+

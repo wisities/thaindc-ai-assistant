@@ -509,8 +509,14 @@
             ⬅️ กลับไปที่ Dashboard
           </button>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
-            <a id="downloadDocxBtn" href="#" class="btn btn-primary">
-              📥 ดาวน์โหลดไฟล์ Word (.docx)
+            <a id="downloadDocxBtn" href="#" class="btn btn-primary" title="ดาวน์โหลดบทสรุป Executive Brief เป็นเอกสาร Word">
+              📥 สรุป Word (.docx)
+            </a>
+            <a id="downloadTranscriptTxtBtn" href="#" class="btn btn-secondary" title="ดาวน์โหลดเนื้อหาถอดเทปเสียงดิบเป็นไฟล์ข้อความ">
+              📝 ถอดเทปดิบ (.txt)
+            </a>
+            <a id="downloadTranscriptDocxBtn" href="#" class="btn btn-secondary" title="ดาวน์โหลดเนื้อหาถอดเทปเป็นเอกสาร Word">
+              📄 ถอดเทป Word (.docx)
             </a>
             <button id="summarizeBtn" class="btn-gold">
               ✨ สร้าง Executive Brief
@@ -519,7 +525,7 @@
               🔗 แชร์ลิงก์
             </button>
             <button id="copyBtn" class="btn-secondary">
-              📋 คัดลอกสรุป
+              📋 คัดลอก
             </button>
             <button id="deleteBtn" class="btn-danger btn-sm">
               🗑️ ลบ
@@ -527,8 +533,22 @@
           </div>
         </div>
 
+        <!-- Detail Sub-tabs: Brief vs Raw Transcript -->
+        <div class="auth-tabs" style="margin-bottom: 16px; border-bottom: 2px solid var(--border);">
+          <div class="auth-tab active" id="tabBriefBtn" onclick="switchDetailTab('brief')">
+            📋 บทสรุป Executive Brief
+          </div>
+          <div class="auth-tab" id="tabTranscriptBtn" onclick="switchDetailTab('transcript')">
+            🎙️ คำบรรยายถอดเทปดิบ (Transcript)
+          </div>
+        </div>
+
         <div class="paper-view" id="briefPaper">
           <p style="color:var(--text-muted); text-align:center;">กำลังโหลดเนื้อหาบทสรุป...</p>
+        </div>
+
+        <div class="paper-view" id="transcriptPaper" style="display:none;">
+          <p style="color:var(--text-muted); text-align:center;">กำลังโหลดเนื้อหาคำบรรยาย...</p>
         </div>
       </section>
     </div>

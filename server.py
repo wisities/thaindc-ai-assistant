@@ -1,5 +1,5 @@
 """ThaiNDC AI Learning Assistant Server with Auth, Dashboard, DOCX Download & Public Sharing."""
-import os, sqlite3, json, uuid, tempfile, time, re, urllib.parse
+import os, sqlite3, json, uuid, tempfile, time, re, urllib.parse, codecs
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
@@ -17,7 +17,11 @@ from auth import (
     hash_password, verify_password, init_auth_tables,
     create_session, get_user_by_token, delete_session
 )
-from docx_generator import build_executive_brief_docx
+from docx_generator import (
+    build_executive_brief_docx,
+    build_transcript_docx,
+    build_transcript_text
+)
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / 'data'
@@ -304,7 +308,8 @@ def list_lectures(request: Request):
     with conn() as c:
         rows = c.execute('''
             SELECT id, date, title, lecturer, created_at, share_token,
-                   CASE WHEN brief IS NULL THEN 0 ELSE 1 END AS has_brief
+                   CASE WHEN brief IS NULL THEN 0 ELSE 1 END AS has_brief,
+                   CASE WHEN (transcript IS NOT NULL AND transcript != '') THEN 1 ELSE 0 END AS has_transcript
             FROM lectures
             WHERE user_id = ?
             ORDER BY date DESC, created_at DESC
@@ -467,12 +472,73 @@ def download_docx(id: str, request: Request):
         }
     )
 
+@app.get('/api/lectures/{id}/download-transcript')
+def download_transcript(id: str, request: Request, format: str = 'txt'):
+    user = get_current_user(request)
+    with conn() as c:
+        row = c.execute('SELECT * FROM lectures WHERE id = ? AND user_id = ?', (id, user['id'])).fetchone()
+    if not row:
+        raise HTTPException(404, 'ไม่พบรายการ')
+    d = dict(row)
+    transcript = d.get('transcript') or ''
+    notes = d.get('notes') or ''
+    source_text = d.get('source_text') or ''
+    if not (transcript or notes or source_text):
+        raise HTTPException(400, 'ยังไม่มีเนื้อหาคำบรรยายหรือบันทึกถอดเสียงสำหรับดาวน์โหลด')
+
+    safe_title = re.sub(r'[\\/*?:"<>|]', '_', d.get('title') or 'Transcript')[:30]
+    date_str = d.get('date') or ''
+
+    if format == 'docx':
+        buf = build_transcript_docx(
+            d.get('title') or '',
+            date_str,
+            d.get('lecturer') or '',
+            transcript,
+            notes,
+            source_text
+        )
+        filename = f"Transcript_{date_str}_{safe_title}.docx"
+        encoded_filename = urllib.parse.quote(filename)
+        return Response(
+            content=buf.getvalue(),
+            media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            headers={
+                'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}",
+                'Access-Control-Expose-Headers': 'Content-Disposition'
+            }
+        )
+    else:
+        txt = build_transcript_text(
+            d.get('title') or '',
+            date_str,
+            d.get('lecturer') or '',
+            transcript,
+            notes,
+            source_text
+        )
+        filename = f"Transcript_{date_str}_{safe_title}.txt"
+        encoded_filename = urllib.parse.quote(filename)
+        return Response(
+            content=codecs.BOM_UTF8 + txt.encode('utf-8'),
+            media_type='text/plain; charset=utf-8',
+            headers={
+                'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}",
+                'Access-Control-Expose-Headers': 'Content-Disposition'
+            }
+        )
+
 # ================= PUBLIC SHARE ENDPOINTS =================
 
 @app.get('/api/share/{token}')
 def get_shared_lecture(token: str):
     with conn() as c:
-        row = c.execute('SELECT id, date, title, lecturer, brief, created_at FROM lectures WHERE share_token = ?', (token,)).fetchone()
+        row = c.execute('''
+            SELECT id, date, title, lecturer, brief, transcript, notes, source_text, created_at,
+                   CASE WHEN (transcript IS NOT NULL AND transcript != '') THEN 1 ELSE 0 END AS has_transcript
+            FROM lectures
+            WHERE share_token = ?
+        ''', (token,)).fetchone()
     if not row:
         raise HTTPException(404, 'ไม่พบบันทึกบทเรียนนี้ หรือลิงก์หมดอายุ')
     d = dict(row)
@@ -507,6 +573,61 @@ def download_shared_docx(token: str):
             'Access-Control-Expose-Headers': 'Content-Disposition'
         }
     )
+
+@app.get('/api/share/{token}/download-transcript')
+def download_shared_transcript(token: str, format: str = 'txt'):
+    with conn() as c:
+        row = c.execute('SELECT * FROM lectures WHERE share_token = ?', (token,)).fetchone()
+    if not row:
+        raise HTTPException(404, 'ไม่พบบันทึกบทเรียนนี้')
+    d = dict(row)
+    transcript = d.get('transcript') or ''
+    notes = d.get('notes') or ''
+    source_text = d.get('source_text') or ''
+    if not (transcript or notes or source_text):
+        raise HTTPException(400, 'ยังไม่มีเนื้อหาคำบรรยายหรือบันทึกถอดเสียงสำหรับดาวน์โหลด')
+
+    safe_title = re.sub(r'[\\/*?:"<>|]', '_', d.get('title') or 'Transcript')[:30]
+    date_str = d.get('date') or ''
+
+    if format == 'docx':
+        buf = build_transcript_docx(
+            d.get('title') or '',
+            date_str,
+            d.get('lecturer') or '',
+            transcript,
+            notes,
+            source_text
+        )
+        filename = f"Transcript_{date_str}_{safe_title}.docx"
+        encoded_filename = urllib.parse.quote(filename)
+        return Response(
+            content=buf.getvalue(),
+            media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            headers={
+                'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}",
+                'Access-Control-Expose-Headers': 'Content-Disposition'
+            }
+        )
+    else:
+        txt = build_transcript_text(
+            d.get('title') or '',
+            date_str,
+            d.get('lecturer') or '',
+            transcript,
+            notes,
+            source_text
+        )
+        filename = f"Transcript_{date_str}_{safe_title}.txt"
+        encoded_filename = urllib.parse.quote(filename)
+        return Response(
+            content=codecs.BOM_UTF8 + txt.encode('utf-8'),
+            media_type='text/plain; charset=utf-8',
+            headers={
+                'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}",
+                'Access-Control-Expose-Headers': 'Content-Disposition'
+            }
+        )
 
 @app.get('/share/{token}')
 def share_page(token: str):
