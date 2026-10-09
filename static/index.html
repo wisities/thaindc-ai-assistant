@@ -1,3 +1,556 @@
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ThaiNDC AI Learning Assistant</title><script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script><style>
-:root{font-family:'Segoe UI',Tahoma,sans-serif;color:#17263c;background:#f4f7fb}*{box-sizing:border-box}body{margin:0;padding:18px;max-width:730px;margin:auto}h1{font-size:20px;margin:5px 0}h2{font-size:15px}small,.muted{color:#64748b}section{background:#fff;padding:16px;margin:12px 0;border-radius:12px;border:1px solid #e3e9f1}label{font-size:12px;font-weight:600;display:block;margin:12px 0 4px}input,textarea,select{width:100%;font:inherit;border:1px solid #cbd5e1;border-radius:7px;padding:9px;background:white}input[type=file]{font-size:12px}button{border:0;border-radius:8px;background:#1765cb;color:white;padding:11px 14px;cursor:pointer;font-weight:600}button.secondary{background:#eaf1fa;color:#13539f}button:disabled{opacity:.55}button+button{margin-left:6px}#status{white-space:pre-wrap;font-size:12px;color:#3c5978}#brief{max-height:430px;overflow:auto;line-height:1.5;font-size:13px;background:#f8fafc;padding:12px;border:1px solid #e2e8f0;border-radius:8px}#brief table{border-collapse:collapse;width:100%;font-size:12px;margin:8px 0}#brief td{border:1px solid #cbd5e1;padding:4px 6px}#brief h1{font-size:14px;font-weight:700;margin:12px 0 4px;color:#0f2942}#brief ul{margin:4px 0 8px;padding-left:18px}#brief li,#brief p{font-size:12.5px;margin:2px 0}#history{width:100%}.footer{font-size:11px;color:#64748b}
-</style></head><body><h1>📘 ThaiNDC AI Learning Assistant</h1><small>ผู้ช่วยสรุปบทเรียนสำหรับผู้บริหาร วปอ. · Word Add-in MVP</small><section><h2>บันทึกการเรียนประจำวัน</h2><form id="lectureForm"><label>วันที่เรียน</label><input required type="date" name="date" id="date"><label>หัวข้อการบรรยาย</label><input required name="title" placeholder="เช่น ยุทธศาสตร์ความมั่นคง"><label>ชื่อวิทยากร</label><input name="lecturer" placeholder="ชื่อ–นามสกุล / ตำแหน่ง"><label>สไลด์ PDF / PowerPoint / TXT (เพิ่มได้หลายไฟล์)</label><input name="slides" type="file" multiple accept=".pdf,.pptx,.txt"><label>เสียง MP3 / M4A / WAV / WEBM (เพิ่มได้หลายไฟล์, ไม่เกิน 25 MB ต่อไฟล์)</label><input name="audio" type="file" multiple accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"><label>บันทึกเพิ่มเติม</label><textarea rows="3" name="notes" placeholder="จดประเด็นสำคัญ คำถาม หรือข้อสังเกต..."></textarea><p><button type="submit">บันทึกและถอดเสียง</button></p></form><div id="status" role="status"></div></section><section><h2>คลังการบรรยาย</h2><select id="history"><option value="">เลือกรายการ...</option></select><p><button id="summarize">✨ สร้าง Executive Brief</button><button class="secondary" id="insert">แทรกลง Word</button><button class="secondary" id="copyBtn">📋 คัดลอกสรุป</button></p><div id="brief">เลือกการบรรยายเพื่อดูเอกสารสรุป</div></section><p class="footer">ข้อมูลจัดเก็บบนเซิร์ฟเวอร์ต้นแบบใน SQLite · ต้องได้รับอนุญาตก่อนอัปโหลด/ถอดเสียงบรรยาย</p><script src="/static/app.js"></script></body></html>
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ThaiNDC AI Learning Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    :root {
+      --primary: #0f2942;
+      --primary-light: #1765cb;
+      --primary-hover: #0e4fa8;
+      --accent-gold: #c59b27;
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text-main: #17263c;
+      --text-muted: #64748b;
+      --success-bg: #ecfdf5;
+      --success-text: #065f46;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 14px rgba(15,41,66,0.08);
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Sarabun', 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 16px;
+    }
+    .app-container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    /* Header */
+    .app-header {
+      background: var(--surface);
+      padding: 14px 20px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-title h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .brand-title small {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      display: block;
+    }
+    .user-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .user-pill {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--primary);
+      background: #eef4fc;
+      padding: 5px 12px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    /* Navigation Bar */
+    .nav-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    .nav-btn {
+      padding: 9px 16px;
+      font-size: 13.5px;
+      font-weight: 600;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .nav-btn:hover { background: #eaf1fa; color: var(--primary-light); }
+    .nav-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+    /* Status banner */
+    #statusBanner {
+      display: none;
+      padding: 11px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    #statusBanner.info { display: block; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    #statusBanner.success { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    #statusBanner.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+    /* Cards & Sections */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .card h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Buttons */
+    button, .btn {
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 7px;
+      border: none;
+      padding: 9px 15px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: var(--primary-light);
+      color: white;
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-gold {
+      background: var(--accent-gold);
+      color: white;
+    }
+    .btn-gold:hover { background: #b0891f; }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-danger {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 6px;
+    }
+    button:disabled, .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    /* Form Inputs */
+    label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #334155;
+      display: block;
+      margin: 12px 0 5px;
+    }
+    input[type=text], input[type=password], input[type=date], textarea, select {
+      width: 100%;
+      font-family: inherit;
+      font-size: 13.5px;
+      border: 1px solid #cbd5e1;
+      border-radius: 7px;
+      padding: 9px 12px;
+      background: white;
+      color: var(--text-main);
+      transition: border 0.2s;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--primary-light);
+      box-shadow: 0 0 0 3px rgba(23,101,203,0.1);
+    }
+    input[type=file] {
+      font-size: 12.5px;
+      padding: 6px 0;
+    }
+
+    /* Auth Screen */
+    .auth-container {
+      max-width: 420px;
+      margin: 40px auto;
+      background: white;
+      padding: 28px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+    }
+    .auth-tabs {
+      display: flex;
+      border-bottom: 2px solid #e2e8f0;
+      margin-bottom: 20px;
+    }
+    .auth-tab {
+      flex: 1;
+      text-align: center;
+      padding: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+    }
+    .auth-tab.active {
+      color: var(--primary-light);
+      border-bottom-color: var(--primary-light);
+    }
+
+    /* Dashboard Stats */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: white;
+      padding: 14px 18px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-number {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Dashboard Table / List */
+    .dashboard-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .lecture-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .lecture-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      transition: all 0.15s ease;
+    }
+    .lecture-card:hover {
+      border-color: #cbd5e1;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.03);
+    }
+    .lecture-info {
+      flex: 1;
+      min-width: 240px;
+    }
+    .lecture-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 3px;
+    }
+    .lecture-meta {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .status-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+    .status-badge.has-brief { background: #dcfce7; color: #15803d; }
+    .status-badge.no-brief { background: #fef3c7; color: #b45309; }
+
+    .lecture-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* Executive Brief Paper Preview */
+    .paper-view {
+      background: white;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 32px;
+      box-shadow: var(--shadow-md);
+      margin-top: 14px;
+      min-height: 400px;
+    }
+
+    /* Modal dialog */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15,41,66,0.45);
+      z-index: 999;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+    }
+    .modal-box {
+      background: white;
+      max-width: 500px;
+      width: 100%;
+      border-radius: 14px;
+      padding: 24px;
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--border);
+    }
+    .modal-box h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+    .share-link-input {
+      display: flex;
+      gap: 8px;
+      margin: 14px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand-title">
+        <div>
+          <h1>📘 ThaiNDC AI Learning Assistant</h1>
+          <small>ระบบสรุปบทเรียนและคลังความรู้สำหรับผู้บริหาร วปอ.</small>
+        </div>
+      </div>
+      <div id="userBar" class="user-bar">
+        <!-- Rendered by JS -->
+      </div>
+    </header>
+
+    <div id="statusBanner"></div>
+
+    <!-- Auth View (When Logged Out) -->
+    <div id="authView" class="auth-container" style="display:none;">
+      <div class="auth-tabs">
+        <div id="tabLogin" class="auth-tab active" onclick="switchAuthTab('login')">เข้าสู่ระบบ</div>
+        <div id="tabRegister" class="auth-tab" onclick="switchAuthTab('register')">สร้างบัญชีผู้ใช้ใหม่</div>
+      </div>
+
+      <form id="authForm">
+        <div id="displayNameField" style="display:none;">
+          <label>ชื่อ-นามสกุล / ตำแหน่ง</label>
+          <input type="text" id="authDisplayName" placeholder="เช่น พล.ต. สมชาย / รุ่นที่ 68">
+        </div>
+
+        <label>ชื่อผู้ใช้งาน (Username)</label>
+        <input type="text" id="authUsername" required placeholder="เช่น somchai68" autocomplete="username">
+
+        <label>รหัสผ่าน (Password)</label>
+        <input type="password" id="authPassword" required placeholder="อย่างน้อย 4 ตัวอักษร" autocomplete="current-password">
+
+        <div style="margin-top: 20px;">
+          <button type="submit" id="authSubmitBtn" class="btn-primary" style="width: 100%; justify-content: center; padding: 11px;">
+            เข้าสู่ระบบ
+          </button>
+        </div>
+      </form>
+      <p style="font-size: 11.5px; color: var(--text-muted); text-align: center; margin-top: 14px;">
+        🔒 ข้อมูลและเสียงบรรยายถูกบันทึกแยกบัญชีส่วนบุคคล ปลอดภัยและเป็นส่วนตัว
+      </p>
+    </div>
+
+    <!-- Main View (When Logged In) -->
+    <div id="mainView" style="display:none;">
+      <nav class="nav-bar">
+        <button id="navDashboard" class="nav-btn active" onclick="showView('dashboard')">
+          📊 คลังบทเรียน (Dashboard)
+        </button>
+        <button id="navRecord" class="nav-btn" onclick="showView('record')">
+          ➕ บันทึกบทเรียนใหม่
+        </button>
+      </nav>
+
+      <!-- View: Dashboard -->
+      <section id="viewDashboard">
+        <div class="stats-row">
+          <div class="stat-card">
+            <div id="statTotal" class="stat-number">0</div>
+            <div class="stat-label">บันทึกบทเรียนทั้งหมด</div>
+          </div>
+          <div class="stat-card">
+            <div id="statBriefs" class="stat-number">0</div>
+            <div class="stat-label">สรุป Executive Brief แล้ว</div>
+          </div>
+          <div class="stat-card">
+            <div id="statReady" class="stat-number">0</div>
+            <div class="stat-label">พร้อมดาวน์โหลดเป็น Word</div>
+          </div>
+        </div>
+
+        <div class="dashboard-toolbar">
+          <input type="text" id="searchLecture" placeholder="🔍 ค้นหาตามหัวข้อ, วิทยากร, วันที่..." style="max-width: 320px;">
+          <button class="btn-primary" onclick="showView('record')">
+            ➕ บันทึกบทเรียนใหม่
+          </button>
+        </div>
+
+        <div class="card">
+          <h2>📚 รายการบทเรียนที่บันทึกไว้</h2>
+          <div id="lectureList" class="lecture-grid">
+            <p style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px;">กำลังโหลดรายการ...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- View: Record New Lecture -->
+      <section id="viewRecord" style="display:none;">
+        <div class="card">
+          <h2>🎙️ บันทึกการเรียนประจำวันใหม่</h2>
+          <form id="lectureForm">
+            <label>วันที่เรียน</label>
+            <input required type="date" name="date" id="date">
+
+            <label>หัวข้อการบรรยาย</label>
+            <input required name="title" id="title" placeholder="เช่น ยุทธศาสตร์ความมั่นคงแห่งชาติ">
+
+            <label>ชื่ออาจารย์ / วิทยากร</label>
+            <input name="lecturer" id="lecturer" placeholder="ชื่อ–นามสกุล / ตำแหน่ง">
+
+            <label>สไลด์ PDF / PowerPoint / TXT (เลือกได้หลายไฟล์ ไม่เกิน 20 MB ต่อไฟล์)</label>
+            <input name="slides" type="file" multiple accept=".pdf,.pptx,.txt">
+
+            <label>ไฟล์เสียงบรรยาย MP3 / M4A / WAV / WEBM (เลือกได้หลายไฟล์ ไม่เกิน 25 MB ต่อไฟล์)</label>
+            <input name="audio" type="file" multiple accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm">
+
+            <label>บันทึกเพิ่มเติมของผู้เรียน (Notes)</label>
+            <textarea rows="3" name="notes" placeholder="จดประเด็นสำคัญ คำถาม หรือข้อสังเกตส่วนตัว..."></textarea>
+
+            <div style="margin-top: 18px; display: flex; gap: 8px;">
+              <button type="submit" id="saveBtn" class="btn-primary">
+                บันทึกและถอดเสียงบรรยาย
+              </button>
+              <button type="button" class="btn-secondary" onclick="showView('dashboard')">
+                ยกเลิก
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- View: Lecture Detail & Executive Brief -->
+      <section id="viewDetail" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+          <button class="btn-secondary" onclick="showView('dashboard')">
+            ⬅️ กลับไปที่ Dashboard
+          </button>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <a id="downloadDocxBtn" href="#" class="btn btn-primary">
+              📥 ดาวน์โหลดไฟล์ Word (.docx)
+            </a>
+            <button id="summarizeBtn" class="btn-gold">
+              ✨ สร้าง Executive Brief
+            </button>
+            <button id="shareBtn" class="btn-secondary">
+              🔗 แชร์ลิงก์
+            </button>
+            <button id="copyBtn" class="btn-secondary">
+              📋 คัดลอกสรุป
+            </button>
+            <button id="deleteBtn" class="btn-danger btn-sm">
+              🗑️ ลบ
+            </button>
+          </div>
+        </div>
+
+        <div class="paper-view" id="briefPaper">
+          <p style="color:var(--text-muted); text-align:center;">กำลังโหลดเนื้อหาบทสรุป...</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- Share Link Modal -->
+    <div id="shareModal" class="modal-overlay">
+      <div class="modal-box">
+        <h3>🔗 ลิงก์ดาวน์โหลดและดูสรุปภายนอก</h3>
+        <p style="font-size: 13px; color: var(--text-muted);">
+          ทุกคนที่มีลิงก์นี้สามารถเปิดอ่าน Executive Brief และกดดาวน์โหลดไฟล์ Word (.docx) ได้ทันทีโดยไม่ต้องเข้าสู่ระบบ:
+        </p>
+        <div class="share-link-input">
+          <input type="text" id="shareUrlInput" readonly onclick="this.select()">
+          <button id="copyShareUrlBtn" class="btn-primary">คัดลอก</button>
+        </div>
+        <div style="text-align: right; margin-top: 14px;">
+          <button class="btn-secondary" onclick="closeShareModal()">ปิดหน้าต่าง</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

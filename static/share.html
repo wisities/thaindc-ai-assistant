@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Executive Brief · ThaiNDC AI Learning Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #0f2942;
+      --primary-light: #1765cb;
+      --gold: #d4af37;
+      --bg: #f1f5f9;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Sarabun', 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 24px 16px;
+    }
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      background: white;
+      padding: 14px 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      border: 1px solid var(--border);
+    }
+    .branding h1 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .branding p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .action-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      font-size: 13.5px;
+      font-weight: 600;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      font-family: inherit;
+    }
+    .btn-primary {
+      background: var(--primary-light);
+      color: white;
+      box-shadow: 0 2px 6px rgba(23, 101, 203, 0.25);
+    }
+    .btn-primary:hover {
+      background: #0f52aa;
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+    }
+    .btn-secondary:hover {
+      background: #e2e8f0;
+    }
+    .paper {
+      background: white;
+      padding: 48px;
+      border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(15, 41, 66, 0.08);
+      border: 1px solid var(--border);
+      min-height: 500px;
+    }
+    @media (max-width: 640px) {
+      .paper { padding: 24px 18px; }
+      .top-bar { flex-direction: column; align-items: stretch; }
+      .action-group { justify-content: stretch; }
+      .action-group .btn { flex: 1; justify-content: center; }
+    }
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    #loading {
+      text-align: center;
+      padding: 60px 0;
+      color: var(--text-muted);
+      font-size: 15px;
+    }
+    #alert {
+      display: none;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    #alert.success { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    #alert.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="alert"></div>
+
+    <header class="top-bar">
+      <div class="branding">
+        <h1>📘 ThaiNDC AI Learning Assistant</h1>
+        <p>เอกสารสรุปบทเรียนรายวันเพื่อผู้บริหาร วปอ. (Executive Brief)</p>
+      </div>
+      <div class="action-group">
+        <a id="downloadDocx" href="#" class="btn btn-primary">
+          📥 ดาวน์โหลดไฟล์ Word (.docx)
+        </a>
+        <button id="copyBtn" class="btn btn-secondary">
+          📋 คัดลอกสรุป
+        </button>
+        <button onclick="window.print()" class="btn btn-secondary">
+          🖨️ พิมพ์
+        </button>
+      </div>
+    </header>
+
+    <main class="paper" id="paperContent">
+      <div id="loading">กำลังโหลดเอกสารสรุปบทเรียน...</div>
+    </main>
+
+    <footer class="footer">
+      ThaiNDC AI Learning Assistant · ข้อมูลสรุปเพื่อการศึกษา วปอ. · ปรับปรุงล่าสุด 2026
+    </footer>
+  </div>
+
+  <script>
+    const token = window.location.pathname.split('/').pop();
+    const paper = document.getElementById('paperContent');
+    const downloadDocx = document.getElementById('downloadDocx');
+    const copyBtn = document.getElementById('copyBtn');
+    const alertBox = document.getElementById('alert');
+
+    function showAlert(msg, type='success') {
+      alertBox.textContent = msg;
+      alertBox.className = type;
+      setTimeout(() => { alertBox.className = ''; alertBox.style.display = 'none'; }, 4000);
+    }
+
+    async function loadShared() {
+      if (!token) {
+        paper.innerHTML = '<p style="color:red; text-align:center;">ไม่พบรหัสลิงก์เอกสาร</p>';
+        return;
+      }
+      try {
+        const res = await fetch('/api/share/' + token);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || 'ไม่พบเอกสารนี้ หรือลิงก์หมดอายุ');
+        }
+        const data = await res.json();
+        document.title = (data.title || 'Executive Brief') + ' · ThaiNDC AI';
+        downloadDocx.href = '/api/share/' + token + '/download-docx';
+
+        if (data.brief_html) {
+          paper.innerHTML = data.brief_html;
+        } else {
+          paper.innerHTML = '<pre style="white-space:pre-wrap; font-family:inherit;">' + (data.brief || 'ยังไม่มีสรุป') + '</pre>';
+        }
+
+        copyBtn.onclick = async () => {
+          try {
+            if (navigator.clipboard && window.ClipboardItem && data.brief_html) {
+              const blob = new Blob([data.brief_html], { type: 'text/html' });
+              const textBlob = new Blob([paper.innerText || paper.textContent], { type: 'text/plain' });
+              await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob, 'text/plain': textBlob })]);
+              showAlert('คัดลอกเรียบร้อย! สามารถวาง (Ctrl+V) ลงใน Word หรือช่องแชทได้ทันที');
+            } else {
+              await navigator.clipboard.writeText(paper.innerText || paper.textContent);
+              showAlert('คัดลอกข้อความสรุปเรียบร้อยแล้ว');
+            }
+          } catch (e) {
+            showAlert('ไม่สามารถคัดลอกได้: ' + e.message, 'error');
+          }
+        };
+      } catch (err) {
+        paper.innerHTML = '<p style="color:#b91c1c; text-align:center; padding: 40px 0;">' + err.message + '</p>';
+        downloadDocx.style.display = 'none';
+        copyBtn.style.display = 'none';
+      }
+    }
+
+    loadShared();
+  </script>
+</body>
+</html>
