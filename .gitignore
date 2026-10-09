@@ -1,0 +1,15 @@
+.venv/
+*.pem
+.env
+data/*.sqlite3*
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.agents/
+*.log
+Executive Brief.docx
+table.json
+test_brief.html
+structure.json
+extracted_doc.txt

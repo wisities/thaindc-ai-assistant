@@ -1,0 +1,17 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+.agents
+*.pem
+data/*.sqlite3
+data/*.sqlite3-journal
+Executive Brief.docx
+table.json
+test_brief.html
+structure.json
+extracted_doc.txt
+table_style*

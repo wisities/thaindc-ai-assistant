@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  thaindc-ai:
+    build: .
+    container_name: thaindc-ai-assistant
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - TRANSCRIBE_MODEL=${TRANSCRIBE_MODEL:-gemini-2.5-flash}
+      - BRIEF_MODEL=${BRIEF_MODEL:-gemini-2.5-flash}
+    volumes:
+      - ./data:/app/data

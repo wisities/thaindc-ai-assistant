@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="TaskPaneApp">
+<Id>f50385c6-b76e-47d0-9ff0-950ad89735db</Id><Version>1.0.0.0</Version><ProviderName>ThaiNDC AI Learning Assistant</ProviderName><DefaultLocale>th-TH</DefaultLocale><DisplayName DefaultValue="ThaiNDC AI Learning Assistant"/><Description DefaultValue="ผู้ช่วยสรุปบทเรียนรายวันเพื่อผู้บริหาร วปอ."/>
+<IconUrl DefaultValue="https://localhost:8443/static/icon.png"/><SupportUrl DefaultValue="https://localhost:8443/"/>
+<Hosts><Host Name="Document"/></Hosts><DefaultSettings><SourceLocation DefaultValue="https://localhost:8443/"/></DefaultSettings><Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>
