@@ -40,6 +40,26 @@ def init_auth_tables(c: sqlite3.Connection):
     if 'share_token' not in cols:
         c.execute('ALTER TABLE lectures ADD COLUMN share_token TEXT')
 
+    # Check if users table has is_admin column
+    user_cols = [r['name'] for r in c.execute('PRAGMA table_info(users)').fetchall()]
+    if 'is_admin' not in user_cols:
+        c.execute('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0')
+
+    # Ensure admin account exists with password 1234
+    pwd_hash, salt = hash_password('1234')
+    admin_row = c.execute('SELECT id FROM users WHERE username = ?', ('admin',)).fetchone()
+    now_str = datetime.now(timezone.utc).isoformat()
+    if not admin_row:
+        c.execute('''
+            INSERT INTO users (id, username, password_hash, salt, display_name, created_at, is_admin)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+        ''', ('admin-system', 'admin', pwd_hash, salt, 'ผู้ดูแลระบบ (Admin)', now_str))
+    else:
+        c.execute('''
+            UPDATE users SET password_hash = ?, salt = ?, is_admin = 1, display_name = ?
+            WHERE username = ?
+        ''', (pwd_hash, salt, 'ผู้ดูแลระบบ (Admin)', 'admin'))
+
 def create_session(c: sqlite3.Connection, user_id: str) -> str:
     token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
@@ -53,7 +73,7 @@ def get_user_by_token(c: sqlite3.Connection, token: str) -> Optional[dict]:
         return None
     now = datetime.now(timezone.utc).isoformat()
     row = c.execute('''
-        SELECT u.id, u.username, u.display_name, u.created_at, s.expires_at 
+        SELECT u.id, u.username, u.display_name, u.is_admin, u.created_at, s.expires_at 
         FROM sessions s 
         JOIN users u ON s.user_id = u.id 
         WHERE s.token = ? AND s.expires_at > ?

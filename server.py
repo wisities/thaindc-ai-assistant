@@ -261,7 +261,7 @@ def register(body: RegisterRequest, response: Response):
         token = create_session(c, user_id)
 
     response.set_cookie('session_token', token, max_age=30*86400, httponly=False, samesite='lax')
-    return {'token': token, 'user': {'id': user_id, 'username': u, 'display_name': d}}
+    return {'token': token, 'user': {'id': user_id, 'username': u, 'display_name': d, 'is_admin': False}}
 
 @app.post('/api/auth/login')
 def login(body: LoginRequest, response: Response):
@@ -282,7 +282,8 @@ def login(body: LoginRequest, response: Response):
         'user': {
             'id': user['id'],
             'username': user['username'],
-            'display_name': user['display_name'] or user['username']
+            'display_name': user['display_name'] or user['username'],
+            'is_admin': bool(user.get('is_admin'))
         }
     }
 
@@ -299,6 +300,62 @@ def logout(request: Request, response: Response):
             delete_session(c, token)
     response.delete_cookie('session_token')
     return {'status': 'ok'}
+
+# ================= ADMIN MANAGEMENT ENDPOINTS =================
+
+class AdminResetPasswordRequest(BaseModel):
+    new_password: str
+
+@app.get('/api/admin/users')
+def list_admin_users(request: Request):
+    user = get_current_user(request)
+    if not user.get('is_admin'):
+        raise HTTPException(403, 'สิทธิ์เฉพาะผู้ดูแลระบบ (Admin) เท่านั้น')
+    with conn() as c:
+        rows = c.execute('''
+            SELECT u.id, u.username, u.display_name, u.is_admin, u.created_at,
+                   COUNT(l.id) AS lecture_count
+            FROM users u
+            LEFT JOIN lectures l ON u.id = l.user_id
+            GROUP BY u.id
+            ORDER BY u.created_at ASC
+        ''').fetchall()
+        return [dict(r) for r in rows]
+
+@app.post('/api/admin/users/{user_id}/reset-password')
+def admin_reset_password(user_id: str, payload: AdminResetPasswordRequest, request: Request):
+    user = get_current_user(request)
+    if not user.get('is_admin'):
+        raise HTTPException(403, 'สิทธิ์เฉพาะผู้ดูแลระบบ (Admin) เท่านั้น')
+    new_pwd = payload.new_password.strip()
+    if not new_pwd or len(new_pwd) < 3:
+        raise HTTPException(400, 'รหัสผ่านต้องมีความยาวอย่างน้อย 3 ตัวอักษร')
+    pwd_hash, salt = hash_password(new_pwd)
+    with conn() as c:
+        target = c.execute('SELECT id, username FROM users WHERE id = ?', (user_id,)).fetchone()
+        if not target:
+            raise HTTPException(404, 'ไม่พบบัญชีผู้ใช้นี้')
+        c.execute('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?', (pwd_hash, salt, user_id))
+        c.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
+    return {'status': 'ok', 'message': f'รีเซ็ตรหัสผ่านของผู้ใช้ {target["username"]} เรียบร้อยแล้ว'}
+
+@app.delete('/api/admin/users/{user_id}')
+def admin_delete_user(user_id: str, request: Request):
+    user = get_current_user(request)
+    if not user.get('is_admin'):
+        raise HTTPException(403, 'สิทธิ์เฉพาะผู้ดูแลระบบ (Admin) เท่านั้น')
+    with conn() as c:
+        target = c.execute('SELECT id, username FROM users WHERE id = ?', (user_id,)).fetchone()
+        if not target:
+            raise HTTPException(404, 'ไม่พบบัญชีผู้ใช้นี้')
+        if target['username'] == 'admin':
+            raise HTTPException(400, 'ไม่สามารถลบบัญชีหลัก admin ได้')
+        if user['id'] == user_id:
+            raise HTTPException(400, 'ไม่สามารถลบบัญชีของตนเองได้')
+        c.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
+        c.execute('DELETE FROM lectures WHERE user_id = ?', (user_id,))
+        c.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    return {'status': 'ok', 'message': f'ลบผู้ใช้ {target["username"]} เรียบร้อยแล้ว'}
 
 # ================= LECTURES ENDPOINTS =================
 

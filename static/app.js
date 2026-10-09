@@ -79,14 +79,19 @@ async function initAuth() {
 
 function updateUserBar() {
   const userBar = el('userBar');
+  const navAdmin = el('navAdmin');
   if (currentUser) {
+    const isAdmin = Boolean(currentUser.is_admin);
+    if (navAdmin) navAdmin.style.display = isAdmin ? 'inline-block' : 'none';
     userBar.innerHTML = `
-      <div class="user-pill">
-        👤 <span>${escapeHtml(currentUser.display_name || currentUser.username)}</span>
+      <div class="user-pill" style="${isAdmin ? 'border-color: #b0891f; background: #fdfbf7;' : ''}">
+        ${isAdmin ? '👑' : '👤'} <span>${escapeHtml(currentUser.display_name || currentUser.username)}</span>
+        ${isAdmin ? '<span style="font-size:10px; background:#b0891f; color:white; padding:1px 5px; border-radius:10px; margin-left:4px; font-weight:600;">ADMIN</span>' : ''}
       </div>
       <button class="btn-secondary btn-sm" onclick="logout()">ออกจากระบบ</button>
     `;
   } else {
+    if (navAdmin) navAdmin.style.display = 'none';
     userBar.innerHTML = `
       <button class="btn-primary btn-sm" onclick="showAuthScreen()">เข้าสู่ระบบ</button>
     `;
@@ -164,9 +169,11 @@ function showView(viewName, lectureId = null) {
   el('viewDashboard').style.display = 'none';
   el('viewRecord').style.display = 'none';
   el('viewDetail').style.display = 'none';
+  if (el('viewAdmin')) el('viewAdmin').style.display = 'none';
 
   el('navDashboard').classList.remove('active');
   el('navRecord').classList.remove('active');
+  if (el('navAdmin')) el('navAdmin').classList.remove('active');
 
   if (viewName === 'dashboard') {
     el('viewDashboard').style.display = 'block';
@@ -178,6 +185,10 @@ function showView(viewName, lectureId = null) {
   } else if (viewName === 'detail') {
     el('viewDetail').style.display = 'block';
     if (lectureId) loadLectureDetail(lectureId);
+  } else if (viewName === 'admin') {
+    if (el('viewAdmin')) el('viewAdmin').style.display = 'block';
+    if (el('navAdmin')) el('navAdmin').classList.add('active');
+    loadAdminUsers();
   }
 }
 
@@ -626,6 +637,110 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// ================= ADMIN USER MANAGEMENT =================
+let currentResetTargetUserId = null;
+
+async function loadAdminUsers() {
+  const tbody = el('adminUsersTbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:32px; color:var(--text-muted);">กำลังโหลดรายชื่อผู้ใช้...</td></tr>';
+  try {
+    const users = await api('/api/admin/users');
+    if (!users || users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:32px; color:var(--text-muted);">ยังไม่มีผู้ใช้ในระบบ</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const isTargetAdmin = Boolean(u.is_admin);
+      const isSelf = currentUser && currentUser.id === u.id;
+      const createdStr = u.created_at ? new Date(u.created_at).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' }) : '-';
+      return `
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:12px 16px; font-weight:600; color:var(--primary);">
+            ${escapeHtml(u.username)} ${isSelf ? '<span style="font-size:11px; color:var(--text-muted); font-weight:normal;">(คุณ)</span>' : ''}
+          </td>
+          <td style="padding:12px 16px; color:#334155;">
+            ${escapeHtml(u.display_name || '-')}
+          </td>
+          <td style="padding:12px 16px; text-align:center;">
+            <span style="background:#f1f5f9; padding:2px 8px; border-radius:10px; font-weight:600;">${u.lecture_count || 0}</span>
+          </td>
+          <td style="padding:12px 16px;">
+            ${isTargetAdmin 
+              ? '<span style="background:#fef3c7; color:#92400e; font-size:11.5px; font-weight:600; padding:2px 8px; border-radius:12px; border:1px solid #fde68a;">👑 Admin</span>' 
+              : '<span style="background:#e0f2fe; color:#0369a1; font-size:11.5px; font-weight:600; padding:2px 8px; border-radius:12px; border:1px solid #bae6fd;">User</span>'
+            }
+          </td>
+          <td style="padding:12px 16px; color:var(--text-muted); font-size:12.5px;">
+            ${createdStr}
+          </td>
+          <td style="padding:12px 16px; text-align:right;">
+            <div style="display:inline-flex; gap:6px;">
+              <button class="btn btn-secondary btn-sm" onclick="openResetPwdModal('${u.id}', '${escapeHtml(u.username)}')">
+                🔑 รีเซ็ตรหัสผ่าน
+              </button>
+              ${(!isSelf && u.username !== 'admin') ? `
+                <button class="btn btn-danger btn-sm" onclick="adminDeleteUser('${u.id}', '${escapeHtml(u.username)}')">
+                  🗑️ ลบ
+                </button>
+              ` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:32px; color:red;">ผิดพลาด: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function openResetPwdModal(userId, username) {
+  currentResetTargetUserId = userId;
+  el('resetPwdTargetText').textContent = `ผู้ใช้: ${username}`;
+  el('newAdminPwdInput').value = '';
+  el('resetPwdModal').style.display = 'flex';
+  el('newAdminPwdInput').focus();
+}
+
+function closeResetPwdModal() {
+  currentResetTargetUserId = null;
+  el('resetPwdModal').style.display = 'none';
+}
+
+if (el('confirmResetPwdBtn')) {
+  el('confirmResetPwdBtn').onclick = async () => {
+    if (!currentResetTargetUserId) return;
+    const newPwd = el('newAdminPwdInput').value.trim();
+    if (!newPwd || newPwd.length < 3) {
+      return alert('กรุณาระบุรหัสผ่านใหม่อย่างน้อย 3 ตัวอักษร');
+    }
+    try {
+      const res = await api(`/api/admin/users/${currentResetTargetUserId}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: newPwd })
+      });
+      showBanner(res.message || 'รีเซ็ตรหัสผ่านเรียบร้อยแล้ว', 'success');
+      closeResetPwdModal();
+    } catch (err) {
+      showBanner('รีเซ็ตไม่สำเร็จ: ' + err.message, 'error');
+    }
+  };
+}
+
+async function adminDeleteUser(userId, username) {
+  if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้ "${username}" และบทเรียนทั้งหมดของเขา? (การลบจะไม่สามารถกู้คืนได้)`)) {
+    return;
+  }
+  try {
+    const res = await api(`/api/admin/users/${userId}`, { method: 'DELETE' });
+    showBanner(res.message || 'ลบผู้ใช้เรียบร้อยแล้ว', 'success');
+    await loadAdminUsers();
+  } catch (err) {
+    showBanner('ลบไม่สำเร็จ: ' + err.message, 'error');
+  }
 }
 
 // Initialize on load

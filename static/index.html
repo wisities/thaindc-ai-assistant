@@ -433,6 +433,9 @@
         <button id="navRecord" class="nav-btn" onclick="showView('record')">
           ➕ บันทึกบทเรียนใหม่
         </button>
+        <button id="navAdmin" class="nav-btn" style="display:none;" onclick="showView('admin')">
+          👥 จัดการผู้ใช้ (Admin)
+        </button>
       </nav>
 
       <!-- View: Dashboard -->
@@ -551,6 +554,53 @@
           <p style="color:var(--text-muted); text-align:center;">กำลังโหลดเนื้อหาคำบรรยาย...</p>
         </div>
       </section>
+
+      <!-- View: Admin User Management -->
+      <section id="viewAdmin" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+          <div>
+            <h2 style="font-size:18px; color:var(--primary); margin:0;">👥 การจัดการบัญชีผู้ใช้งาน (Admin Management)</h2>
+            <p style="font-size:13px; color:var(--text-muted); margin:4px 0 0;">ดูรายชื่อสมาชิกในระบบ รีเซ็ตรหัสผ่าน และจัดการบัญชีผู้ใช้</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="loadAdminUsers()">
+            🔄 รีเฟรชรายชื่อ
+          </button>
+        </div>
+
+        <div style="background:white; border-radius:12px; border:1px solid var(--border); overflow-x:auto; box-shadow:var(--shadow-sm);">
+          <table style="width:100%; border-collapse:collapse; font-size:13.5px; text-align:left;">
+            <thead>
+              <tr style="background:#f8fafc; border-bottom:2px solid var(--border); color:#475569;">
+                <th style="padding:12px 16px;">ชื่อผู้ใช้ (Username)</th>
+                <th style="padding:12px 16px;">ชื่อที่แสดง</th>
+                <th style="padding:12px 16px; text-align:center;">บทเรียนที่บันทึก</th>
+                <th style="padding:12px 16px;">สถานะ / สิทธิ์</th>
+                <th style="padding:12px 16px;">วันที่สมัคร</th>
+                <th style="padding:12px 16px; text-align:right;">การดำเนินการ</th>
+              </tr>
+            </thead>
+            <tbody id="adminUsersTbody">
+              <tr>
+                <td colspan="6" style="text-align:center; padding:32px; color:var(--text-muted);">กำลังโหลดรายชื่อผู้ใช้...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- Admin Reset Password Modal -->
+    <div id="resetPwdModal" class="modal-overlay">
+      <div class="modal-box">
+        <h3>🔑 รีเซ็ตรหัสผ่านผู้ใช้</h3>
+        <p id="resetPwdTargetText" style="font-size: 13px; color: var(--text-muted); margin: 6px 0 12px;"></p>
+        <label>รหัสผ่านใหม่ (อย่างน้อย 3 ตัวอักษร)</label>
+        <input type="password" id="newAdminPwdInput" placeholder="ระบุรหัสผ่านใหม่สำหรับผู้ใช้นี้">
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+          <button class="btn-secondary" onclick="closeResetPwdModal()">ยกเลิก</button>
+          <button id="confirmResetPwdBtn" class="btn-primary">บันทึกรหัสผ่านใหม่</button>
+        </div>
+      </div>
     </div>
 
     <!-- Share Link Modal -->
